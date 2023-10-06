@@ -1244,7 +1244,7 @@ class NQueensProblem(Problem):
     <Node (7, 3, 0, 2, 5, 1, 6, 4)>
     """
 
-    def __init__(self, N):
+    def __init__(self, N): 
         super().__init__(tuple([-1] * N))
         self.N = N
 

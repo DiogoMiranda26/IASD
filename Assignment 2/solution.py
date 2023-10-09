@@ -8,11 +8,24 @@ class FleetProblem(search.Problem):
         self.A_matrix = None # Transportation time matrix
         self.R_list = list() # List of the requests
         self.V_list = list() # List of the number of seats for each vehicle
-        self.request_vehicle_list = list() # List that stores the vehicle that carries request index
-        self.available_seats = list() # List that stores the available seats for each vehicle at a given time
-        self.vehicles_position = list() # List that stores the current position of each vehicle
-        self.vehicles_clock = list() # List that stores the time instance at the current position of each vehicle 
-        
+    
+    # For a given state, this class returns the information for each vehicle
+    class VehiclesData():
+        def __init__(self, V_list, R_list):
+            self.vehicles_position = [0] * len(V_list) # List that stores the vehicle that carries request index   
+            self.available_seats = copy.deepcopy(V_list) # List that stores the available seats for each vehicle at a given time
+            self.vehicles_clock = [0] * len(V_list) # List that stores the current position of each vehicle
+            self.request_vehicle_list = [-1] * len(R_list) # List that stores the time instance at the current position of each vehicle
+            
+    class State():
+        def __init__(self, V_list, R_list, vehicles_data):
+            self.info = vehicles_data
+            self.requests = ['Waiting'] * len(R_list)
+            self.time = max(vehicles_data.vehicles_clock)
+            
+        def __lt__(self, other_state):
+            return self.time < other_state.time
+      
     # Load a problem from the opened file object fh
     def load(self, fh):
         file = fh
@@ -44,15 +57,12 @@ class FleetProblem(search.Problem):
                     # read the number of seats for a vehicle
                     number_of_seats = int(file.readline().strip())
                     self.V_list.append(number_of_seats)
-
-        self.vehicles_position = [0] * len(self.V_list)   
-        self.available_seats = copy.copy(self.V_list)
-        self.vehicles_clock = [0] * len(self.V_list)
-        self.request_vehicle_list = [-1] * len(self.R_list)   
-        # Initial state where all passengers are waiting for a pickup  
-        initial_state = tuple(['Waiting'] * len(self.R_list))
+ 
+        # Initial state where all passengers are waiting for a pickup
+        vehicles_data = self.VehiclesData(self.V_list, self.R_list)  
+        initial_state = self.State(self.V_list, self.R_list, vehicles_data)
         # Goal state where all requests have been attended  
-        goal_state = tuple(['Finished'] * len(self.R_list))
+        goal_state = ['Finished'] * len(self.R_list)
         super().__init__(initial_state, goal_state)
         return
     
@@ -68,57 +78,56 @@ class FleetProblem(search.Problem):
     # The new state must change from 'Waiting' to 'Onboard' and from 'Onboard' to 'Finished'     
     def result(self, state, action):
         operator, vehicle, request, action_time = action
+        # print(f'This is the state {state.requests}')
+        new_state = copy.deepcopy(state)
         if operator == 'Pickup':
-            state = list(state)
-            state[request] = 'Onboard'
-            state = tuple(state)
-            self.request_vehicle_list[request] = vehicle
-            self.vehicles_clock[vehicle] = action_time
-            self.vehicles_position[vehicle] = self.R_list[request][1]
-            self.available_seats[vehicle] -= self.R_list[request][3] 
+            new_state.requests[request] = 'Onboard'
+            new_state.info.request_vehicle_list[request] = vehicle
+            new_state.info.vehicles_clock[vehicle] = action_time
+            new_state.info.vehicles_position[vehicle] = self.R_list[request][1]
+            new_state.info.available_seats[vehicle] -= self.R_list[request][3]
+            new_state.time = action_time
         elif operator == 'Dropoff':
-            state = list(state)
-            state[request] = 'Finished'
-            state = tuple(state)
-            self.vehicles_clock[vehicle] = action_time
-            self.vehicles_position[vehicle] = self.R_list[request][2]
-            self.available_seats[vehicle] += self.R_list[request][3]
-        return state
+            new_state.requests[request] = 'Finished'
+            new_state.info.vehicles_clock[vehicle] = action_time
+            new_state.info.vehicles_position[vehicle] = self.R_list[request][2]
+            new_state.info.available_seats[vehicle] += self.R_list[request][3]
+            new_state.time = action_time
+        # print(f'The new state will be {new_state.requests} after the action {action}')
+        return new_state
 
     # Return the list of actions that can be executed in the given state
     def actions(self, state):
         actions = []
-        print(state)
-        for request, request_state in enumerate(state):
+        for request, request_state in enumerate(state.requests):
             if request_state == 'Waiting':
                 for vehicle in range(len(self.V_list)):
-                    print(self.available_seats[vehicle], self.R_list[request][3])
                     # Pickup action: valid if the vehicle has enough seats
-                    if self.available_seats[vehicle] >= self.R_list[request][3]:
+                    if state.info.available_seats[vehicle] >= self.R_list[request][3]:
                         # The action time is the clock up to date plus the transportation time from the current vehicle position to the request origin point
-                        action_time = self.vehicles_clock[vehicle] + self.get_transportation_time(self.vehicles_position[vehicle], self.R_list[request][1])
+                        action_time = max(self.R_list[request][0], state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.R_list[request][1]))
                         actions.append(('Pickup', vehicle, request, action_time))
             # Dropoff action
             elif request_state == 'Onboard':
-                vehicle = self.request_vehicle_list[request]
+                vehicle = state.info.request_vehicle_list[request]
                 # The action time is the clock up to date plus the transportation time from the current vehicle position to the request destination point
-                action_time = self.vehicles_clock[vehicle] + self.get_transportation_time(self.vehicles_position[vehicle], self.R_list[request][2])
+                action_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.R_list[request][2])
                 actions.append(('Dropoff', vehicle, request, action_time))
-        print(actions)
-        print()
-        if not hasattr(self, 'actions_counter'):
-            self.actions_counter = 0
-        self.actions_counter += 1
-        if self.actions_counter == 2:
-            exit()
+        # print(f'Possible actions : {actions}')
+        # print()
+        # if not hasattr(self, 'actions_counter'):
+        #     self.actions_counter = 0
+        # self.actions_counter += 1
+        # if self.actions_counter == 2:
+        #     exit()
         return actions
         
     def goal_test(self, state):
-        # return True if state == super().goal_test else False
-        return super().goal_test(state)
+        return True if state.requests == self.goal else False
     
     def path_cost(self, c, state1, action, state2):
-        return action[3] # returns action time
+        return state2.time
+        
     
     def solve(self):
         # Calls the uninformed search algorithm chosen

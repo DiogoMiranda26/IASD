@@ -5,17 +5,15 @@ import io
 from solution import *
 
 P = """
-# this is a comment
 P 4
 20 30 40
    50 60
       70
-R 5
+R 4
 10 1 2 1
 15 1 3 1
 16 2 3 1
 20 2 1 1
-25 1 2 2
 V 2
 4
 5
@@ -34,8 +32,7 @@ def main():
         problem.load(fh)
     result = problem.solve()
     print(result)
-
-        
+      
 if __name__=='__main__':
     main()
 

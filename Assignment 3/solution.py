@@ -134,29 +134,31 @@ class FleetProblem(search.Problem):
         estimated_cost = 0
         waiting_requests = [request for request, status in enumerate(state.requests) if status == 'Waiting']
         onboard_requests = [request for request, status in enumerate(state.requests) if status == 'Onboard']
-        request_positions = defaultdict(lambda: defaultdict(list)) # Dictionary that stores the vehicles at each request position and the requests that they can attend
+        request_vehicles = defaultdict(list)
+        estimated_cost_onboard = 0
+        estimated_cost_waiting = 0
         for request in onboard_requests:
             vehicle = state.info.request_vehicle_list[request]
             dropoff_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_destination(request))
             expected_dropoff_time = state.info.pickup_times[request] + self.get_transportation_time(self.get_origin(request), self.get_destination(request))
             delay = dropoff_time - expected_dropoff_time
-            estimated_cost += delay
+            estimated_cost_onboard = max(estimated_cost_onboard, delay)
         if waiting_requests:
             for request in waiting_requests:
                 for vehicle, seats in enumerate(self.V_list):
                     if seats >= self.get_passengers(request):
-                        request_positions[self.get_origin(request)][vehicle].append(request)
-            for origin, vehicles in request_positions.items():
-                position_delay = float('inf')
-                for vehicle, requests in vehicles.items():
-                    # Iterate through the requests and find if there is a vehicle that can attend multiple requests and if that is the case, save the minimum delay for that vehicle and the requests that it can attend
-                    # calculate the sum of delays for each vehicle in each position and then return the minimum delay for that vehicle for that position
-                    delay = 0
-                    for request in requests:
-                        pickup_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], origin)
-                        delay += max(pickup_time - self.get_request_time(request), 0)   
-                    position_delay = min(position_delay, delay)
-                estimated_cost += position_delay
+                        request_vehicles[request].append(vehicle)
+            for request, vehicles in request_vehicles.items():
+                delay_pickup = float('inf')
+                for vehicle in vehicles:
+                    pickup_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_origin(request))
+                    delay = max(pickup_time - self.get_request_time(request), 0)
+                    # select the vehicle with minimum pickup delay to serve the request
+                    delay_pickup = min(delay_pickup, delay)
+                # for the request with maximum delay, select its value as the heuristic cost to reach the goal state
+                estimated_cost_waiting = max(estimated_cost, delay_pickup)
+        # return the cost of the maximum estimate to reach the goal state
+        estimated_cost = max(estimated_cost_onboard, estimated_cost_waiting)
         return estimated_cost
 
     def result(self, state, action):

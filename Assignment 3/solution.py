@@ -11,19 +11,19 @@ class FleetProblem(search.Problem):
         
     def get_request_time(self, request):
         """Return the time of the request"""
-        return self.R_list[request - 1][0]
+        return self.R_list[request][0]
     
     def get_origin(self, request):
         """Return the origin of the request"""
-        return self.R_list[request - 1][1]
+        return self.R_list[request][1]
     
     def get_destination(self, request):
         """Return the destination of the request"""
-        return self.R_list[request - 1][2]
+        return self.R_list[request][2]
     
     def get_passengers(self, request):
         """Return the number of passengers of the request"""
-        return self.R_list[request - 1][3]
+        return self.R_list[request][3]
     
     def get_transportation_time(self, origin, destination):
         """Return the transportation time from origin to destination point"""

@@ -7,7 +7,7 @@ class FleetProblem(search.Problem):
     def __init__(self):
         self.A_matrix = None # Transportation time matrix
         self.R_list = [] # List of the requests
-        self.V_list = [] # List of the number of seats for each vehicle#
+        self.V_list = [] # List of the number of seats for each vehicle
         
     def get_request_time(self, request):
         """Return the time of the request"""
@@ -42,6 +42,8 @@ class FleetProblem(search.Problem):
             self.request_vehicle_list = [-1] * len(R_list)
             # List that stores the pickup time of the requests
             self.pickup_times = [0] * len(R_list)
+            # List that stores the pickup delays of the requests
+            self.pickup_delays = [0] * len(R_list)
      
     # Class that represents the state structure of the problem       
     class State():
@@ -59,7 +61,8 @@ class FleetProblem(search.Problem):
             tuple(state.info.vehicles_clock),
             tuple(state.info.request_vehicle_list),
             tuple(state.requests),
-            tuple(state.info.pickup_times)
+            tuple(state.info.pickup_times),
+            tuple(state.info.pickup_delays)
             )
         return tuple_state
     
@@ -72,6 +75,7 @@ class FleetProblem(search.Problem):
         myState.info.request_vehicle_list = list(tuple_state[3])
         myState.requests = list(tuple_state[4])
         myState.info.pickup_times = list(tuple_state[5])
+        myState.info.pickup_delays = list(tuple_state[6])
         return myState
         
     def load(self, fh):
@@ -126,6 +130,15 @@ class FleetProblem(search.Problem):
         cost = c + delay
         return cost
     
+    def stepsLeft(self, state):
+        steps = 0
+        for status in state.requests:
+            if status == 'Waiting':
+                steps +=2
+            elif status == 'Onboard':
+                steps += 1
+        return steps
+        
     def h(self, state):
         """Return the heuristic value for the given state"""
         node = state
@@ -142,7 +155,7 @@ class FleetProblem(search.Problem):
             dropoff_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_destination(request))
             expected_dropoff_time = state.info.pickup_times[request] + self.get_transportation_time(self.get_origin(request), self.get_destination(request))
             delay = dropoff_time - expected_dropoff_time
-            estimated_cost_onboard += delay
+            estimated_cost_onboard += state.info.pickup_delays[request]
         if waiting_requests:
             for request in waiting_requests:
                 for vehicle, seats in enumerate(self.V_list):
@@ -157,6 +170,7 @@ class FleetProblem(search.Problem):
                     delay_pickup = min(delay_pickup, delay)
                 estimated_cost_waiting += delay_pickup
         estimated_cost += estimated_cost_onboard + estimated_cost_waiting
+        estimated_cost += (2*len(self.R_list) - self.stepsLeft(state)) * np.amin(self.A_matrix)/1000
         return estimated_cost
 
     def result(self, state, action):
@@ -171,6 +185,7 @@ class FleetProblem(search.Problem):
             new_state.info.vehicles_position[vehicle] = self.get_origin(request)
             new_state.info.available_seats[vehicle] -= self.get_passengers(request)
             new_state.info.pickup_times[request] = action_time
+            new_state.info.pickup_delays[request] = max(action_time - self.get_request_time(request), 0)
         elif operator == 'Dropoff':
             new_state.requests[request] = 'Finished'
             new_state.info.vehicles_clock[vehicle] = action_time

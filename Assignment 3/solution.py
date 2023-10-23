@@ -142,7 +142,7 @@ class FleetProblem(search.Problem):
             dropoff_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_destination(request))
             expected_dropoff_time = state.info.pickup_times[request] + self.get_transportation_time(self.get_origin(request), self.get_destination(request))
             delay = dropoff_time - expected_dropoff_time
-            estimated_cost_onboard = max(estimated_cost_onboard, delay)
+            estimated_cost_onboard += delay
         if waiting_requests:
             for request in waiting_requests:
                 for vehicle, seats in enumerate(self.V_list):
@@ -155,10 +155,8 @@ class FleetProblem(search.Problem):
                     delay = max(pickup_time - self.get_request_time(request), 0)
                     # select the vehicle with minimum pickup delay to serve the request
                     delay_pickup = min(delay_pickup, delay)
-                # for the request with maximum delay, select its value as the heuristic cost to reach the goal state
-                estimated_cost_waiting = max(estimated_cost, delay_pickup)
-        # return the cost of the maximum estimate to reach the goal state
-        estimated_cost = max(estimated_cost_onboard, estimated_cost_waiting)
+                estimated_cost_waiting += delay_pickup
+        estimated_cost += estimated_cost_onboard + estimated_cost_waiting
         return estimated_cost
 
     def result(self, state, action):

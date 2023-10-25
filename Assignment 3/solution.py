@@ -2,6 +2,7 @@ import search
 import numpy as np
 import copy
 from collections import defaultdict
+from itertools import permutations
 
 class FleetProblem(search.Problem):
     def __init__(self):
@@ -147,29 +148,49 @@ class FleetProblem(search.Problem):
         estimated_cost = 0
         waiting_requests = [request for request, status in enumerate(state.requests) if status == 'Waiting']
         onboard_requests = [request for request, status in enumerate(state.requests) if status == 'Onboard']
-        request_vehicles = defaultdict(list)
         estimated_cost_onboard = 0
         estimated_cost_waiting = 0
+        delay_vehicles = [float('inf')] * len(self.V_list)
+        vehicle_requests = defaultdict(list) # Dictionary that stores the requests onboard for each vehicle
+        for request, vehicle in enumerate(state.info.request_vehicle_list):
+            if vehicle != -1:
+                vehicle_requests[vehicle].append(request)
+                          
         for request in onboard_requests:
             vehicle = state.info.request_vehicle_list[request]
             dropoff_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_destination(request))
             expected_dropoff_time = state.info.pickup_times[request] + self.get_transportation_time(self.get_origin(request), self.get_destination(request))
-            delay = dropoff_time - expected_dropoff_time
-            estimated_cost_onboard += state.info.pickup_delays[request]
+            delay = dropoff_time - expected_dropoff_time + state.info.pickup_delays[request]
+            estimated_cost_onboard += delay
         if waiting_requests:
             for request in waiting_requests:
                 for vehicle, seats in enumerate(self.V_list):
-                    if seats >= self.get_passengers(request):
-                        request_vehicles[request].append(vehicle)
-            for request, vehicles in request_vehicles.items():
-                delay_pickup = float('inf')
-                for vehicle in vehicles:
-                    pickup_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_origin(request))
-                    delay = max(pickup_time - self.get_request_time(request), 0)
-                    # select the vehicle with minimum pickup delay to serve the request
-                    delay_pickup = min(delay_pickup, delay)
-                estimated_cost_waiting += delay_pickup
-        estimated_cost += estimated_cost_onboard + estimated_cost_waiting
+                    # The vehicle can pick up the request
+                    if state.info.available_seats[vehicle] >= self.get_passengers(request):
+                        pickup_time = state.info.vehicles_clock[vehicle] + self.get_transportation_time(state.info.vehicles_position[vehicle], self.get_origin(request))
+                        delay = max(pickup_time - self.get_request_time(request), 0)
+                        # select the vehicle with minimum pickup delay to serve the request
+                        delay_vehicles[vehicle] = delay
+                    # The vehicle cannot pick up the request until it drops off some passengers
+                    elif state.info.available_seats[vehicle] < self.get_passengers(request) and seats >= self.get_passengers(request):
+                        permutations_list = list(permutations(vehicle_requests[vehicle]))
+                        delay_permutations = [float('inf')] * len(permutations_list)
+                        for index, permutation in enumerate(permutations_list):
+                            vehicle_clock = float(state.info.vehicles_clock[vehicle])
+                            vehicle_position = int(state.info.vehicles_position[vehicle])
+                            available_seats = int(state.info.available_seats[vehicle])
+                            for dropped in permutation:
+                                vehicle_clock = vehicle_clock + self.get_transportation_time(vehicle_position, self.get_destination(dropped))
+                                vehicle_position = self.get_destination(dropped)
+                                available_seats += self.get_passengers(dropped)
+                                if available_seats >= self.get_passengers(request):
+                                    pickup_time = vehicle_clock + self.get_transportation_time(vehicle_position, self.get_origin(request))
+                                    delay = max(pickup_time - self.get_request_time(request), 0)
+                                    delay_permutations[index] = delay
+                                    break
+                        delay_vehicles[vehicle] = min(delay_permutations)
+                estimated_cost_waiting += min(delay_vehicles)         
+        estimated_cost = estimated_cost_onboard + estimated_cost_waiting
         estimated_cost += (2*len(self.R_list) - self.stepsLeft(state)) * np.amin(self.A_matrix)/1000
         return estimated_cost
 

@@ -232,7 +232,7 @@ class FleetProblem(search.Problem):
         return True if state[4] == self.goal else False
          
     def solve(self):
-        """Calls the uniform_cost_search method from search.py and returns the solution"""
+        """Calls the astar search method from search.py and returns the solution"""
         node = search.Node(self.initial)
         node = search.astar_search(self)
         return node.solution()
